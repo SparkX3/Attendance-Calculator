@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Attendance Tracker</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Main Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <span>Smart Attendance</span>
+            </div>
+            <div class="user-menu hidden" id="user-menu">
+                <span id="header-user-name">Student Name</span>
+                <div class="avatar"><i class="fa-solid fa-user"></i></div>
+                <button id="logout-btn" class="btn-icon"><i class="fa-solid fa-sign-out-alt"></i></button>
+            </div>
+            <button class="theme-toggle" id="theme-toggle" aria-label="Toggle Dark Mode">
+                <i class="fa-solid fa-moon"></i>
+            </button>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- 1. Login View -->
+            <section id="login-view" class="view active">
+                <div class="card login-card">
+                    <h2>Welcome Back</h2>
+                    <p class="subtitle">Log in to track your attendance seamlessly.</p>
+                    <div class="illustration">
+                        <i class="fa-solid fa-calendar-check fa-4x text-primary"></i>
+                    </div>
+                    <button class="btn btn-google" id="google-login-btn">
+                        <i class="fa-brands fa-google"></i> Continue with Google
+                    </button>
+                </div>
+            </section>
+
+            <!-- 2. Profile Creation View -->
+            <section id="profile-view" class="view hidden">
+                <div class="card profile-card">
+                    <h2>Create Your Profile</h2>
+                    <p class="subtitle">Tell us a bit about yourself</p>
+                    <form id="profile-form">
+                        <div class="form-group">
+                            <label for="fullName">Full Name</label>
+                            <input type="text" id="fullName" required placeholder="John Doe">
+                        </div>
+                        <div class="form-group">
+                            <label for="rollNumber">Roll Number</label>
+                            <input type="text" id="rollNumber" required placeholder="Ex: 101123">
+                        </div>
+                        <div class="form-group">
+                            <label for="collegeName">College Name</label>
+                            <input type="text" id="collegeName" required placeholder="University of Technology">
+                        </div>
+                        <div class="form-group">
+                            <label for="semester">Current Semester</label>
+                            <select id="semester" required>
+                                <option value="" disabled selected>Select Semester</option>
+                                <option value="1">Semester 1</option>
+                                <option value="2">Semester 2</option>
+                                <option value="3">Semester 3</option>
+                                <option value="4">Semester 4</option>
+                                <option value="5">Semester 5</option>
+                                <option value="6">Semester 6</option>
+                                <option value="7">Semester 7</option>
+                                <option value="8">Semester 8</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-full">Save Profile</button>
+                    </form>
+                </div>
+            </section>
+
+            <!-- 3. Upload Timetable View -->
+            <section id="upload-view" class="view hidden">
+                <div class="card upload-card">
+                    <h2>Upload Timetable</h2>
+                    <p class="subtitle">Let AI setup your schedule automatically</p>
+                    
+                    <div class="upload-area" id="upload-area">
+                        <i class="fa-solid fa-cloud-arrow-up fa-3x"></i>
+                        <h3>Drag & Drop or Click to Upload</h3>
+                        <p>Supports Image, PDF or Screenshot</p>
+                        <input type="file" id="timetable-file" accept="image/*,.pdf" hidden>
+                        <button class="btn btn-outline" onclick="document.getElementById('timetable-file').click()">Select File</button>
+                    </div>
+
+                    <div class="skip-action">
+                        <button class="btn-text" id="skip-upload-btn">Skip & Setup Manually</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 4. Analyzing State View -->
+            <section id="analyzing-view" class="view hidden">
+                <div class="card analyzing-card">
+                    <div class="spinner"></div>
+                    <h2>Analyzing your timetable with AI...</h2>
+                    <p class="subtitle">Extracting subjects, days, and time slots.</p>
+                </div>
+            </section>
+
+            <!-- 5. Confirmation / Edit View -->
+            <section id="confirmation-view" class="view hidden">
+                <div class="card confirmation-card">
+                    <h2>Review Timetable</h2>
+                    <p class="subtitle">Is this timetable correct? You can edit details manually.</p>
+                    
+                    <div class="table-responsive">
+                        <table class="timetable-table" id="timetable-table">
+                            <thead>
+                                <tr>
+                                    <th>Day</th>
+                                    <th>Time Slot</th>
+                                    <th>Subject</th>
+                                    <th>Type</th>
+                                    <th>Faculty</th>
+                                    <th>Room</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="timetable-body">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="add-lecture-row">
+                        <button class="btn btn-outline btn-sm" id="add-lecture-btn"><i class="fa-solid fa-plus"></i> Add Lecture</button>
+                    </div>
+
+                    <div class="confirmation-actions">
+                        <button class="btn btn-success" id="confirm-timetable-btn"><i class="fa-solid fa-check"></i> Yes, Continue</button>
+                        <button class="btn btn-secondary" id="save-edits-btn" style="display:none;"><i class="fa-solid fa-save"></i> Save Changes</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 6. Dashboard View -->
+            <section id="dashboard-view" class="view hidden">
+                <div class="dashboard-header">
+                    <h2>Your Attendance</h2>
+                    <button class="btn btn-primary btn-sm" id="add-subject-btn"><i class="fa-solid fa-plus"></i> Subject</button>
+                </div>
+
+                <!-- Overall Stats -->
+                <div class="stats-grid">
+                    <div class="stat-card primary-gradient">
+                        <div class="stat-icon"><i class="fa-solid fa-chart-pie"></i></div>
+                        <div class="stat-content">
+                            <span class="stat-title">Overall</span>
+                            <span class="stat-value" id="overall-percentage">0%</span>
+                        </div>
+                    </div>
+                    <div class="stat-card success-gradient">
+                        <div class="stat-icon"><i class="fa-solid fa-check-circle"></i></div>
+                        <div class="stat-content">
+                            <span class="stat-title">Attended</span>
+                            <span class="stat-value" id="overall-attended">0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card danger-gradient">
+                        <div class="stat-icon"><i class="fa-solid fa-times-circle"></i></div>
+                        <div class="stat-content">
+                            <span class="stat-title">Missed</span>
+                            <span class="stat-value" id="overall-missed">0</span>
+                        </div>
+                    </div>
+                    <div class="stat-card warning-gradient">
+                        <div class="stat-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                        <div class="stat-content">
+                            <span class="stat-title">Safe Bunks</span>
+                            <span class="stat-value" id="overall-safe-bunks">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Goal Setting -->
+                <div class="card goal-card">
+                    <div class="goal-header">
+                        <h3>Target Attendance: <span id="target-display">75%</span></h3>
+                        <input type="range" id="target-slider" min="50" max="100" value="75" class="slider">
+                    </div>
+                    <p id="target-message" class="target-message">You are on track!</p>
+                </div>
+
+                <!-- Subjects Grid -->
+                <div class="subjects-grid" id="subjects-container">
+                    <!-- Populated by JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="add-subject-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Add Subject</h3>
+                <button class="close-btn" id="close-subject-modal"><i class="fa-solid fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="new-subject-name">Subject Name</label>
+                    <input type="text" id="new-subject-name" placeholder="E.g. Data Structures">
+                </div>
+                <button class="btn btn-primary btn-full" id="save-new-subject-btn">Add Subject</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
