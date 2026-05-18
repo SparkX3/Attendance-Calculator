@@ -3,7 +3,8 @@
 export interface ExtractedLecture {
   id: string;
   day: string;
-  time: string;
+  startTime: string;
+  endTime: string;
   lectureName: string;
   facultyName: string;
   roomNumber: string;
@@ -19,7 +20,8 @@ export const extractTimetableFromImage = async (fileUrl: string): Promise<Extrac
     {
       id: "mock1",
       day: "Monday",
-      time: "09:00 AM",
+      startTime: "09:00",
+      endTime: "10:00",
       lectureName: "Data Structures",
       facultyName: "Dr. Smith",
       roomNumber: "101",
@@ -27,7 +29,8 @@ export const extractTimetableFromImage = async (fileUrl: string): Promise<Extrac
     {
       id: "mock2",
       day: "Monday",
-      time: "11:00 AM",
+      startTime: "11:00",
+      endTime: "12:00",
       lectureName: "Operating Systems",
       facultyName: "Prof. Johnson",
       roomNumber: "102",
@@ -35,7 +38,8 @@ export const extractTimetableFromImage = async (fileUrl: string): Promise<Extrac
     {
       id: "mock3",
       day: "Tuesday",
-      time: "10:00 AM",
+      startTime: "10:00",
+      endTime: "11:00",
       lectureName: "Database Systems",
       facultyName: "Mr. Lee",
       roomNumber: "Lab 1",
@@ -43,7 +47,8 @@ export const extractTimetableFromImage = async (fileUrl: string): Promise<Extrac
     {
       id: "mock4",
       day: "Wednesday",
-      time: "09:00 AM",
+      startTime: "09:00",
+      endTime: "10:00",
       lectureName: "Data Structures (Tutorial)",
       facultyName: "Dr. Smith",
       roomNumber: "205",

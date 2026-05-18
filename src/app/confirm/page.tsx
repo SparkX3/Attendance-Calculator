@@ -47,7 +47,8 @@ export default function ConfirmTimetable() {
     const newLecture: ExtractedLecture = {
       id: `manual_${Date.now()}`,
       day,
-      time: "",
+      startTime: "09:00",
+      endTime: "10:00",
       lectureName: "",
       facultyName: "",
       roomNumber: "",
@@ -64,12 +65,13 @@ export default function ConfirmTimetable() {
       // Save all lectures to firestore
       const promises = timetable.map(async (lecture) => {
         // Skip empty manual rows
-        if (!lecture.lectureName && !lecture.time) return;
+        if (!lecture.lectureName && !lecture.startTime) return;
         
         const docRef = doc(db, `users/${user.uid}/timetable`, lecture.id);
         return setDoc(docRef, {
           day: lecture.day,
-          time: lecture.time,
+          startTime: lecture.startTime || "00:00",
+          endTime: lecture.endTime || "00:00",
           lectureName: lecture.lectureName,
           facultyName: lecture.facultyName,
           roomNumber: lecture.roomNumber,
@@ -88,12 +90,14 @@ export default function ConfirmTimetable() {
     }
   };
 
-  // Group timetable by day
+  // Group timetable by day and auto-sort by startTime
   const groupedTimetable = FIXED_DAYS.map(day => {
-    // Filter and basic sort by time (alphabetical for now since format is unknown)
-    const dayLectures = timetable.filter(l => l.day === day).sort((a, b) => a.time.localeCompare(b.time));
+    const dayLectures = timetable.filter(l => l.day === day).sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
     return { day, lectures: dayLectures };
   });
+
+  // Extract unique lecture names for suggestions
+  const uniqueLectureNames = Array.from(new Set(timetable.map(l => l.lectureName).filter(Boolean)));
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 w-full">
@@ -108,6 +112,12 @@ export default function ConfirmTimetable() {
         </div>
 
         {error && <div className="mb-6 p-4 rounded-md bg-red-50 text-red-700">{error}</div>}
+
+        <datalist id="lecture-names">
+          {uniqueLectureNames.map((name, idx) => (
+            <option key={idx} value={name} />
+          ))}
+        </datalist>
 
         <div className="space-y-10">
           {groupedTimetable.map(({ day, lectures }) => (
@@ -128,8 +138,9 @@ export default function ConfirmTimetable() {
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">Time</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-2/6">Lecture Name</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">Start Time</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">End Time</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/4">Lecture Name</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">Faculty (Opt)</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/6">Room (Opt)</th>
                       {(isEditMode || lectures.length === 0) && <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider w-1/12">Action</th>}
@@ -139,23 +150,35 @@ export default function ConfirmTimetable() {
                     {lectures.length > 0 ? (
                       lectures.map((lecture) => (
                         <tr key={lecture.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
+                          <td className="px-4 py-4 whitespace-nowrap">
                             {isEditMode ? (
                               <input 
-                                type="text" 
-                                value={lecture.time} 
-                                onChange={(e) => updateLecture(lecture.id, "time", e.target.value)}
+                                type="time" 
+                                value={lecture.startTime} 
+                                onChange={(e) => updateLecture(lecture.id, "startTime", e.target.value)}
                                 className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
-                                placeholder="09:00 AM"
                               />
                             ) : (
-                              <span className="text-sm font-medium text-gray-900">{lecture.time || "-"}</span>
+                              <span className="text-sm font-medium text-gray-900">{lecture.startTime || "-"}</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-4 whitespace-nowrap">
+                            {isEditMode ? (
+                              <input 
+                                type="time" 
+                                value={lecture.endTime} 
+                                onChange={(e) => updateLecture(lecture.id, "endTime", e.target.value)}
+                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
+                              />
+                            ) : (
+                              <span className="text-sm font-medium text-gray-900">{lecture.endTime || "-"}</span>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {isEditMode ? (
                               <input 
                                 type="text" 
+                                list="lecture-names"
                                 value={lecture.lectureName} 
                                 onChange={(e) => updateLecture(lecture.id, "lectureName", e.target.value)}
                                 className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
@@ -200,7 +223,7 @@ export default function ConfirmTimetable() {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500 italic">
+                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500 italic">
                           No classes scheduled for this day.
                         </td>
                       </tr>

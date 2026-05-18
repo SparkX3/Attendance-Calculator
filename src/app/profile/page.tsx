@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { db } from "@/firebase/config";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { GraduationCap } from "lucide-react";
+import { GraduationCap, Calendar, AlertTriangle } from "lucide-react";
 
 export default function Profile() {
   const { user, profile, refreshProfile } = useAuth();
@@ -21,10 +21,15 @@ export default function Profile() {
   useEffect(() => {
     if (!user) {
       router.push("/login");
-    } else if (profile) {
-      router.push("/dashboard"); // Already has profile
     } else {
-      if (user.displayName) setFullName(user.displayName);
+      if (profile) {
+        setFullName(profile.fullName || "");
+        setRollNumber(profile.rollNumber || "");
+        setCollege(profile.college || "");
+        setSemester(profile.semester || "");
+      } else if (user.displayName) {
+        setFullName(user.displayName);
+      }
     }
   }, [user, profile, router]);
 
@@ -43,27 +48,42 @@ export default function Profile() {
         college,
         semester,
         photoURL: user.photoURL || "",
-        createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
+        // Keep createdAt if it already exists, otherwise add it.
+        // setDoc with merge:true would be safer but we might need to create from scratch. 
+        // We'll just set updatedAt for now.
+        createdAt: profile?.createdAt || serverTimestamp(),
       });
       await refreshProfile();
-      router.push("/upload");
+      // If it's a new profile, go to upload. If existing, go back to dashboard.
+      if (!profile) {
+        router.push("/upload");
+      } else {
+        router.push("/dashboard");
+      }
     } catch (err: any) {
       setError(err.message);
       setLoading(false);
     }
   };
 
+  const handleChangeTimetable = () => {
+    const confirmChange = window.confirm("Changing timetable may affect future attendance records. Do you want to continue?");
+    if (confirmChange) {
+      router.push("/upload");
+    }
+  };
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-gray-50 px-4 py-12">
-      <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-xl sm:p-12">
+    <div className="flex min-h-screen flex-col items-center bg-gray-50 px-4 py-12">
+      <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-xl sm:p-12 mb-8">
         <div className="mb-8 text-center flex flex-col items-center">
           <div className="mb-4 rounded-full bg-indigo-100 p-4 text-indigo-600">
             <GraduationCap className="h-10 w-10" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-900">Complete Your Profile</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{profile ? "Edit Profile" : "Complete Your Profile"}</h1>
           <p className="mt-2 text-sm text-gray-600">
-            We need a few more details to set up your account.
+            {profile ? "Update your details below." : "We need a few more details to set up your account."}
           </p>
         </div>
 
@@ -124,15 +144,54 @@ export default function Profile() {
 
           {error && <div className="text-sm text-red-600">{error}</div>}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
-          >
-            {loading ? "Saving..." : "Save Profile & Continue"}
-          </button>
+          <div className="flex gap-4 pt-4">
+            {profile && (
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="w-full rounded-md bg-white px-4 py-3 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 focus:outline-none"
+              >
+                Cancel
+              </button>
+            )}
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-md bg-indigo-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+            >
+              {loading ? "Saving..." : (profile ? "Save Changes" : "Save Profile & Continue")}
+            </button>
+          </div>
         </form>
       </div>
+
+      {profile && (
+        <div className="w-full max-w-xl rounded-2xl bg-white p-8 shadow-xl sm:p-12 border-t-4 border-orange-500">
+          <div className="flex items-start gap-4">
+            <div className="rounded-full bg-orange-100 p-3 text-orange-600 shrink-0">
+               <Calendar className="h-6 w-6" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                Timetable Settings
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">
+                You can upload a new timetable or re-configure your current one manually. 
+              </p>
+              <div className="mt-4 bg-orange-50 text-orange-800 text-xs p-3 rounded-md flex gap-2 items-start border border-orange-200">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                <p>Warning: Modifying your timetable might misalign with your past attendance records.</p>
+              </div>
+              <button
+                onClick={handleChangeTimetable}
+                className="mt-6 w-full sm:w-auto rounded-md bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors"
+              >
+                Change Timetable
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
