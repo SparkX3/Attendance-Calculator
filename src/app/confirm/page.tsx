@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/firebase/config";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from "firebase/firestore";
 import { Trash2, Plus, Check } from "lucide-react";
 import { ExtractedLecture } from "@/services/timetableExtractor";
 
@@ -17,6 +17,7 @@ export default function ConfirmTimetable() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [isEditMode, setIsEditMode] = useState(false);
+  const [fetching, setFetching] = useState(true);
 
   useEffect(() => {
     if (!user && !loading) {
@@ -24,16 +25,53 @@ export default function ConfirmTimetable() {
       return;
     }
     
-    // Load cached data
+    if (user) {
+      loadData();
+    }
+  }, [user, loading, router]);
+
+  const loadData = async () => {
+    if (!user) return;
+    setFetching(true);
+    // 1. Try to load cached data from upload flow
     const cached = localStorage.getItem("temp_extracted_timetable");
     if (cached) {
       try {
         setTimetable(JSON.parse(cached));
+        setFetching(false);
+        return;
       } catch (e) {
-        setTimetable([]);
+        console.error("Cache parse error", e);
       }
     }
-  }, [user, loading, router]);
+
+    // 2. If no cache, load existing timetable from Firestore
+    try {
+      const snap = await getDocs(collection(db, `users/${user.uid}/timetable`));
+      if (!snap.empty) {
+        const existingData: ExtractedLecture[] = snap.docs.map(d => {
+          const data = d.data();
+          return {
+            id: d.id,
+            day: data.day,
+            startTime: data.startTime,
+            endTime: data.endTime,
+            lectureName: data.lectureName,
+            facultyName: data.facultyName,
+            roomNumber: data.roomNumber,
+          };
+        });
+        setTimetable(existingData);
+        setIsEditMode(true); // Automatically enter edit mode if loading existing
+      } else {
+        setTimetable([]);
+        setIsEditMode(true); // Empty state, let them edit
+      }
+    } catch (err) {
+      console.error("Error fetching existing timetable", err);
+    }
+    setFetching(false);
+  };
 
   const updateLecture = (id: string, field: keyof ExtractedLecture, value: string) => {
     setTimetable(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l));
@@ -62,12 +100,16 @@ export default function ConfirmTimetable() {
     setError("");
 
     try {
-      // Save all lectures to firestore
-      const promises = timetable.map(async (lecture) => {
-        // Skip empty manual rows
+      // 1. Wipe existing timetable to prevent orphaned deleted lectures
+      const existingSnap = await getDocs(collection(db, `users/${user.uid}/timetable`));
+      const deletePromises = existingSnap.docs.map(d => deleteDoc(d.ref));
+      await Promise.all(deletePromises);
+
+      // 2. Save all current lectures
+      const savePromises = timetable.map(async (lecture) => {
         if (!lecture.lectureName && !lecture.startTime) return;
         
-        const docRef = doc(db, `users/${user.uid}/timetable`, lecture.id);
+        const docRef = doc(db, `users/${user.uid}/timetable`, lecture.id.startsWith('manual_') ? doc(collection(db, 'temp')).id : lecture.id);
         return setDoc(docRef, {
           day: lecture.day,
           startTime: lecture.startTime || "00:00",
@@ -80,7 +122,7 @@ export default function ConfirmTimetable() {
         });
       });
 
-      await Promise.all(promises);
+      await Promise.all(savePromises);
       localStorage.removeItem("temp_extracted_timetable");
       router.push("/dashboard");
     } catch (err: any) {
@@ -96,8 +138,11 @@ export default function ConfirmTimetable() {
     return { day, lectures: dayLectures };
   });
 
-  // Extract unique lecture names for suggestions
   const uniqueLectureNames = Array.from(new Set(timetable.map(l => l.lectureName).filter(Boolean)));
+
+  if (fetching || loading) {
+    return <div className="flex min-h-screen items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent"></div></div>;
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8 w-full">
@@ -129,7 +174,7 @@ export default function ConfirmTimetable() {
                     onClick={() => addLecture(day)}
                     className="flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-800"
                   >
-                    <Plus className="h-4 w-4 mr-1" /> Add Class
+                    <Plus className="h-4 w-4 mr-1" /> Add Lecture
                   </button>
                 )}
               </div>
@@ -254,10 +299,11 @@ export default function ConfirmTimetable() {
             </>
           ) : (
             <button
-              onClick={() => setIsEditMode(false)}
-              className="w-full sm:w-auto rounded-md bg-indigo-600 px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+              onClick={handleSave}
+              disabled={saving}
+              className="w-full sm:w-auto flex justify-center items-center rounded-md bg-indigo-600 px-8 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
             >
-              Done Editing
+              {saving ? "Saving..." : <><Check className="w-5 h-5 mr-2"/> Save Timetable</>}
             </button>
           )}
         </div>

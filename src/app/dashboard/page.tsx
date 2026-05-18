@@ -3,14 +3,15 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { db, auth } from "@/firebase/config";
-import { collection, getDocs, doc, setDoc, serverTimestamp, writeBatch } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, serverTimestamp, query, where, orderBy } from "firebase/firestore";
 import { useRouter } from "next/navigation";
-import { LogOut, Calendar, CheckCircle2, XCircle, Clock, User as UserIcon, MapPin, Target, AlertCircle, Settings, Award, Undo2, ChevronDown, CheckSquare } from "lucide-react";
+import { LogOut, Calendar, CheckCircle2, XCircle, Clock, User as UserIcon, MapPin, Target, AlertCircle, Settings, Award, Undo2, ChevronDown, CheckSquare, Bell, BellRing, ShieldAlert } from "lucide-react";
 import { signOut } from "firebase/auth";
 import Link from "next/link";
 
 const DAYS_MAP = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const REASONS = ["Medical Leave", "Event Leave", "College Duty", "Other"];
+const ALERT_TYPES = ["Exam", "Internal Test", "MCQ Test", "Viva", "Assignment Submission", "Practical", "Event", "Other"];
 
 interface Lecture {
   id: string;
@@ -32,12 +33,25 @@ interface AttendanceRecord {
   grantedId?: string;
 }
 
+interface AcademicAlert {
+  id: string;
+  title: string;
+  type: string;
+  selectedDate: string;
+  day: string;
+  lectureId: string;
+  lectureName: string;
+  time: string;
+  note: string;
+}
+
 export default function Dashboard() {
   const { user, profile, loading } = useAuth();
   const router = useRouter();
 
   const [timetable, setTimetable] = useState<Lecture[]>([]);
   const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
+  const [alerts, setAlerts] = useState<AcademicAlert[]>([]);
   const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null);
   const [targetAttendance, setTargetAttendance] = useState(75);
   const [fetching, setFetching] = useState(true);
@@ -55,6 +69,15 @@ export default function Dashboard() {
   const [grantApplyToAll, setGrantApplyToAll] = useState(true);
   const [grantSpecificLectures, setGrantSpecificLectures] = useState<string[]>([]);
   const [isGranting, setIsGranting] = useState(false);
+
+  // Alert Modal State
+  const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
+  const [alertDate, setAlertDate] = useState(todayStr);
+  const [alertType, setAlertType] = useState(ALERT_TYPES[0]);
+  const [alertTitle, setAlertTitle] = useState("");
+  const [alertNote, setAlertNote] = useState("");
+  const [alertLectureId, setAlertLectureId] = useState("");
+  const [isSavingAlert, setIsSavingAlert] = useState(false);
 
   useEffect(() => {
     if (!user && !loading) {
@@ -77,6 +100,10 @@ export default function Dashboard() {
       const attSnapshot = await getDocs(collection(db, `users/${user.uid}/attendance`));
       const attData: AttendanceRecord[] = attSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceRecord));
       setAttendance(attData);
+
+      const alertsSnapshot = await getDocs(collection(db, `users/${user.uid}/academicAlerts`));
+      const alertsData: AcademicAlert[] = alertsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AcademicAlert));
+      setAlerts(alertsData);
 
     } catch (error) {
       console.error("Error fetching data:", error);
@@ -116,13 +143,11 @@ export default function Dashboard() {
       payload.grantedReason = customReason;
       if (grantId) payload.grantedId = grantId;
     } else if (status === "Absent" || status === "Present") {
-      // Clear granted info if reverting manually to present/absent
       payload.grantedReason = null;
       payload.grantedId = null;
     }
 
     try {
-      // Use setDoc with merge to preserve createdAt if it exists
       await setDoc(docRef, payload, { merge: true });
 
       setAttendance(prev => {
@@ -144,7 +169,6 @@ export default function Dashboard() {
     setIsGranting(true);
 
     try {
-      // 1. Create master grant record
       const grantRef = doc(collection(db, `users/${user.uid}/grantedAttendance`));
       const grantId = grantRef.id;
       
@@ -152,7 +176,6 @@ export default function Dashboard() {
       const endDateObj = new Date(grantEndDate);
       const datesInRange: string[] = [];
       
-      // Generate all dates in range
       let currentDate = new Date(startDateObj);
       while (currentDate <= endDateObj) {
         datesInRange.push(currentDate.toLocaleDateString('en-CA'));
@@ -168,20 +191,16 @@ export default function Dashboard() {
         updatedAt: serverTimestamp(),
       });
 
-      // 2. Iterate and update only "Absent" records
       for (const d of datesInRange) {
         const dObj = new Date(d);
         const dayName = DAYS_MAP[dObj.getDay()];
         
         const dayLectures = timetable.filter(l => l.day === dayName);
         for (const lec of dayLectures) {
-          // If specific lectures chosen, skip if not in list
           if (!grantApplyToAll && !grantSpecificLectures.includes(lec.id)) continue;
 
-          // Find existing record
           const existingRecord = attendance.find(r => r.lectureId === lec.id && r.selectedDate === d);
           
-          // Only apply if it's explicitly "Absent"
           if (existingRecord && existingRecord.status === "Absent") {
             await markAttendance("Granted", d, lec, grantReason, grantId);
           }
@@ -189,7 +208,6 @@ export default function Dashboard() {
       }
 
       setIsGrantedModalOpen(false);
-      // Reset form
       setGrantNote("");
       setGrantSpecificLectures([]);
       setGrantApplyToAll(true);
@@ -204,6 +222,50 @@ export default function Dashboard() {
     setIsGranting(false);
   };
 
+  const handleAlertSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    
+    const selectedLec = timetable.find(l => l.id === alertLectureId);
+    if (!selectedLec) {
+      alert("Please select a lecture.");
+      return;
+    }
+
+    setIsSavingAlert(true);
+    try {
+      const alertRef = doc(collection(db, `users/${user.uid}/academicAlerts`));
+      const alertDateObj = new Date(alertDate);
+      
+      const payload = {
+        title: alertTitle,
+        type: alertType,
+        selectedDate: alertDate,
+        day: DAYS_MAP[alertDateObj.getDay()],
+        lectureId: selectedLec.id,
+        lectureName: selectedLec.lectureName,
+        time: `${selectedLec.startTime} - ${selectedLec.endTime}`,
+        note: alertNote,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      await setDoc(alertRef, payload);
+
+      setAlerts(prev => [...prev, { id: alertRef.id, ...payload } as AcademicAlert]);
+      
+      setIsAlertModalOpen(false);
+      setAlertTitle("");
+      setAlertNote("");
+      setAlertLectureId("");
+      alert("Academic alert added successfully!");
+    } catch (err) {
+      console.error("Error saving alert:", err);
+      alert("Failed to save alert.");
+    }
+    setIsSavingAlert(false);
+  };
+
   // --- Calculations ---
 
   const getSubjectStats = (subjectName: string) => {
@@ -213,7 +275,7 @@ export default function Dashboard() {
     const granted = records.filter(r => r.status === "Granted").length;
     
     const totalConducted = present + absent + granted;
-    const totalAttended = present + granted; // Granted counts as attended
+    const totalAttended = present + granted; 
     
     const percentage = totalConducted === 0 ? 0 : Math.round((totalAttended / totalConducted) * 100);
 
@@ -257,6 +319,12 @@ export default function Dashboard() {
     return lowSubjects.sort((a, b) => a.percentage - b.percentage);
   };
 
+  const getUpcomingAlerts = () => {
+    return alerts
+      .filter(a => a.selectedDate >= todayStr)
+      .sort((a, b) => a.selectedDate.localeCompare(b.selectedDate));
+  };
+
   const getStatusForSelectedDate = (lectureId: string) => {
     const record = attendance.find(r => r.lectureId === lectureId && r.selectedDate === selectedDateStr);
     return record ? record.status : "Not marked";
@@ -278,17 +346,20 @@ export default function Dashboard() {
 
   const overallStats = getOverallStats();
   const lowSubjects = getLowAttendanceSubjects();
-  const circleOffset = 251.2 - (251.2 * overallStats.percentage) / 100; // 2 * pi * r (r=40)
+  const upcomingAlerts = getUpcomingAlerts();
+  const circleOffset = 251.2 - (251.2 * overallStats.percentage) / 100;
 
-  // Unique lectures for the specific lectures checkbox in Granted modal
   const uniqueTimetableLectures = Array.from(new Set(timetable.map(l => l.id))).map(id => timetable.find(t => t.id === id)!);
+
+  // For Alert Modal: lectures on the selected alert date
+  const alertDateDayObj = new Date(alertDate);
+  const alertDayName = DAYS_MAP[alertDateDayObj.getDay()];
+  const lecturesOnAlertDate = timetable.filter(l => l.day === alertDayName).sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50 flex-col md:flex-row relative">
       
-      {/* Main Area */}
       <div className="flex-1 flex flex-col overflow-y-auto">
-        {/* Header */}
         <header className="bg-white shadow-sm px-4 sm:px-6 py-4 flex justify-between items-center z-10 sticky top-0">
           <div className="flex items-center gap-3">
             <Link href="/profile" className="p-2 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 transition-colors" title="Profile Settings">
@@ -311,14 +382,33 @@ export default function Dashboard() {
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 pointer-events-none" />
             </div>
             
-            <button 
-              onClick={() => setIsGrantedModalOpen(true)}
-              className="bg-purple-100 hover:bg-purple-200 text-purple-700 p-2 rounded-lg font-semibold transition-colors flex items-center gap-2 border border-purple-200"
-              title="Grant Attendance"
-            >
-              <Award className="w-5 h-5" />
-              <span className="hidden sm:block text-sm">Grant Leave</span>
-            </button>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setIsAlertModalOpen(true)}
+                className="bg-blue-100 hover:bg-blue-200 text-blue-700 p-2 rounded-lg font-semibold transition-colors flex items-center gap-2 border border-blue-200"
+                title="Add Academic Alert"
+              >
+                <Bell className="w-5 h-5" />
+              </button>
+              <button 
+                onClick={() => setIsGrantedModalOpen(true)}
+                className="bg-purple-100 hover:bg-purple-200 text-purple-700 p-2 rounded-lg font-semibold transition-colors flex items-center gap-2 border border-purple-200"
+                title="Grant Attendance"
+              >
+                <Award className="w-5 h-5" />
+                <span className="hidden sm:block text-sm">Grant Leave</span>
+              </button>
+              {user?.email === "shingolesanchit123@gmail.com" && (
+                <Link 
+                  href="/admin"
+                  className="bg-red-100 hover:bg-red-200 text-red-700 p-2 rounded-lg font-semibold transition-colors flex items-center gap-2 border border-red-200"
+                  title="Admin Panel"
+                >
+                  <ShieldAlert className="w-5 h-5" />
+                  <span className="hidden sm:block text-sm">Admin</span>
+                </Link>
+              )}
+            </div>
           </div>
 
           <div className="flex items-center gap-4">
@@ -329,13 +419,12 @@ export default function Dashboard() {
           </div>
         </header>
 
-        <main className="flex-1 p-4 sm:p-6 max-w-4xl mx-auto w-full flex flex-col gap-8">
+        <main className="flex-1 p-4 sm:p-6 max-w-5xl mx-auto w-full flex flex-col gap-8">
           
-          {/* Top Analytics Summary Section */}
           <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
             
-            {/* Overall Attendance Circle */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col items-center justify-center relative overflow-hidden">
+            {/* Overall Attendance */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col items-center justify-center relative overflow-hidden h-64">
               <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
                  <Target className="w-32 h-32" />
               </div>
@@ -365,35 +454,46 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Low Attendance Warning */}
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col h-full">
+            {/* Notice Board */}
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100 flex flex-col h-64">
               <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-orange-400" /> Action Required
+                <BellRing className="w-4 h-4 text-blue-500" /> Notice Board
               </h3>
               
-              {lowSubjects.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center px-4">
-                  <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mb-3">
-                    <CheckCircle2 className="w-6 h-6 text-green-600" />
-                  </div>
-                  <p className="font-semibold text-gray-900">All Good!</p>
-                  <p className="text-sm text-gray-500 mt-1">All your subjects are above {targetAttendance}%.</p>
-                </div>
-              ) : (
-                <div className="flex-1 overflow-y-auto pr-2 space-y-3">
-                  {lowSubjects.map((sub, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3 rounded-xl bg-orange-50 border border-orange-100">
-                      <div className="truncate pr-4 font-semibold text-orange-900 text-sm">
-                        {sub.name}
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-bold text-orange-700 text-sm">{sub.percentage}%</span>
-                        <span className="text-[10px] uppercase font-bold bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">Below {targetAttendance}%</span>
-                      </div>
+              <div className="flex-1 overflow-y-auto pr-2 space-y-3">
+                {lowSubjects.map((sub, idx) => (
+                  <div key={`low-${idx}`} className="flex items-center justify-between p-3 rounded-xl bg-orange-50 border border-orange-100">
+                    <div className="truncate pr-4 font-semibold text-orange-900 text-sm">
+                      <AlertCircle className="w-4 h-4 inline mr-2 text-orange-500" />
+                      {sub.name}
                     </div>
-                  ))}
-                </div>
-              )}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-bold text-orange-700 text-sm">{sub.percentage}%</span>
+                      <span className="text-[10px] uppercase font-bold bg-orange-200 text-orange-800 px-2 py-0.5 rounded-full">Below {targetAttendance}%</span>
+                    </div>
+                  </div>
+                ))}
+                
+                {upcomingAlerts.map(alert => (
+                  <div key={alert.id} className="p-3 rounded-xl bg-blue-50 border border-blue-100 flex flex-col gap-1">
+                    <div className="flex justify-between items-start">
+                      <div className="font-semibold text-blue-900 text-sm">{alert.title}</div>
+                      <span className="text-[10px] uppercase font-bold bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full shrink-0">{alert.type}</span>
+                    </div>
+                    <div className="text-xs text-blue-700 font-medium">
+                      {alert.selectedDate} | {alert.lectureName} | {alert.time}
+                    </div>
+                    {alert.note && <div className="text-xs text-blue-600 mt-1 italic">{alert.note}</div>}
+                  </div>
+                ))}
+
+                {lowSubjects.length === 0 && upcomingAlerts.length === 0 && (
+                  <div className="flex flex-col items-center justify-center h-full text-gray-400 mt-8">
+                    <CheckCircle2 className="w-8 h-8 mb-2 text-green-300" />
+                    <p className="text-sm">No important notices right now.</p>
+                  </div>
+                )}
+              </div>
             </div>
             
           </section>
@@ -473,7 +573,7 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* Side Panel for Details */}
+      {/* Side Panel */}
       {selectedLecture && selectedStats && (
         <aside className="w-full md:w-[400px] bg-white border-l border-gray-200 shadow-xl flex flex-col transform transition-transform duration-300 z-20 sticky top-0 h-screen md:h-auto overflow-hidden">
           <div className="p-6 border-b border-gray-100 bg-gray-50 flex justify-between items-start">
@@ -490,7 +590,6 @@ export default function Dashboard() {
           </div>
 
           <div className="p-6 flex-1 overflow-y-auto">
-            {/* Quick Actions */}
             <div className="space-y-3 mb-8">
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Mark Attendance for {selectedDateStr}</h3>
               
@@ -533,7 +632,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Lecture Info */}
             <div className="space-y-4 mb-8">
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Details</h3>
               <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-100">
@@ -549,13 +647,9 @@ export default function Dashboard() {
                     <span className="text-sm">Room {selectedLecture.roomNumber}</span>
                   </div>
                 )}
-                {!selectedLecture.facultyName && !selectedLecture.roomNumber && (
-                   <span className="text-sm text-gray-400 italic">No extra details provided.</span>
-                )}
               </div>
             </div>
 
-            {/* Stats */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Subject Stats</h3>
@@ -579,7 +673,6 @@ export default function Dashboard() {
                     </svg>
                   </div>
                 </div>
-                
                 <div className="grid grid-cols-3 divide-x divide-gray-100 bg-gray-50">
                   <div className="p-3 text-center">
                     <p className="text-xl font-bold text-gray-900">{selectedStats.present}</p>
@@ -595,45 +688,15 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
-
-              {/* Smart Insights */}
-              <div className="mt-4 pb-6">
-                {selectedStats.total === 0 ? (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600 text-center">
-                    Start tracking your attendance for insights.
-                  </div>
-                ) : selectedStats.safeBunks > 0 ? (
-                  <div className="bg-green-50 border border-green-200 rounded-lg p-4 flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-green-800">You are in the safe zone!</p>
-                      <p className="text-sm text-green-700 mt-1">You can afford to bunk <span className="font-bold underline">{selectedStats.safeBunks}</span> more class{selectedStats.safeBunks > 1 ? 'es' : ''}.</p>
-                    </div>
-                  </div>
-                ) : selectedStats.needed > 0 ? (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
-                    <AlertCircle className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-bold text-red-800">Attendance Alert</p>
-                      <p className="text-sm text-red-700 mt-1">You must attend the next <span className="font-bold underline">{selectedStats.needed}</span> class{selectedStats.needed > 1 ? 'es' : ''} to reach {targetAttendance}%.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800 text-center font-bold">
-                    You are exactly on track!
-                  </div>
-                )}
-              </div>
             </div>
           </div>
         </aside>
       )}
 
-      {/* Granted Attendance Modal Overlay */}
+      {/* Granted Attendance Modal */}
       {isGrantedModalOpen && (
         <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            
             <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-purple-50">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-purple-100 text-purple-600 rounded-full">
@@ -648,9 +711,7 @@ export default function Dashboard() {
                 <XCircle className="w-6 h-6" />
               </button>
             </div>
-
             <form onSubmit={handleGrantSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
-              
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700">Reason Type</label>
                 <div className="relative">
@@ -665,7 +726,6 @@ export default function Dashboard() {
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
                 </div>
               </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-sm font-bold text-gray-700">Start Date</label>
@@ -692,89 +752,155 @@ export default function Dashboard() {
                   />
                 </div>
               </div>
-
               <div className="space-y-3">
                 <label className="text-sm font-bold text-gray-700">Lecture Selection</label>
-                
                 <label className="flex items-center gap-3 p-3 border border-purple-200 bg-purple-50/50 rounded-xl cursor-pointer hover:bg-purple-50 transition-colors">
-                  <input 
-                    type="radio" 
-                    checked={grantApplyToAll} 
-                    onChange={() => setGrantApplyToAll(true)}
-                    className="w-5 h-5 text-purple-600 focus:ring-purple-500"
-                  />
+                  <input type="radio" checked={grantApplyToAll} onChange={() => setGrantApplyToAll(true)} className="w-5 h-5 text-purple-600 focus:ring-purple-500"/>
                   <div>
                     <p className="font-bold text-gray-900">All Scheduled Lectures</p>
-                    <p className="text-xs text-gray-500">Apply to all subjects marked absent on selected dates.</p>
                   </div>
                 </label>
-
                 <label className="flex items-center gap-3 p-3 border border-gray-200 rounded-xl cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input 
-                    type="radio" 
-                    checked={!grantApplyToAll} 
-                    onChange={() => setGrantApplyToAll(false)}
-                    className="w-5 h-5 text-purple-600 focus:ring-purple-500"
-                  />
+                  <input type="radio" checked={!grantApplyToAll} onChange={() => setGrantApplyToAll(false)} className="w-5 h-5 text-purple-600 focus:ring-purple-500"/>
                   <div>
                     <p className="font-bold text-gray-900">Specific Subjects Only</p>
-                    <p className="text-xs text-gray-500">Choose which subjects to grant attendance for.</p>
                   </div>
                 </label>
-
                 {!grantApplyToAll && (
                   <div className="mt-4 p-4 border border-gray-200 rounded-xl bg-gray-50 max-h-48 overflow-y-auto space-y-2">
                     {uniqueTimetableLectures.map(lec => (
                       <label key={lec.id} className="flex items-center gap-3 p-2 hover:bg-gray-100 rounded-lg cursor-pointer">
-                        <input 
-                          type="checkbox" 
-                          checked={grantSpecificLectures.includes(lec.id)}
+                        <input type="checkbox" checked={grantSpecificLectures.includes(lec.id)}
                           onChange={(e) => {
                             if (e.target.checked) setGrantSpecificLectures([...grantSpecificLectures, lec.id]);
                             else setGrantSpecificLectures(grantSpecificLectures.filter(id => id !== lec.id));
                           }}
                           className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500"
                         />
-                        <span className="font-semibold text-sm text-gray-800">{lec.lectureName} ({lec.day})</span>
+                        <span className="font-semibold text-sm text-gray-800">{lec.lectureName}</span>
                       </label>
                     ))}
-                    {uniqueTimetableLectures.length === 0 && (
-                      <p className="text-sm text-gray-500 text-center py-2">No timetable setup yet.</p>
-                    )}
                   </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Optional Note</label>
+                <textarea 
+                  value={grantNote} onChange={(e) => setGrantNote(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-3 font-medium text-sm resize-none" rows={2}
+                />
+              </div>
+            </form>
+            <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-4">
+              <button type="button" onClick={() => setIsGrantedModalOpen(false)} className="flex-1 py-3 px-4 bg-white border border-gray-300 rounded-xl font-bold text-gray-700">Cancel</button>
+              <button onClick={handleGrantSubmit} disabled={isGranting || (!grantApplyToAll && grantSpecificLectures.length === 0)} className="flex-1 py-3 px-4 bg-purple-600 rounded-xl font-bold text-white hover:bg-purple-700 disabled:opacity-50">Apply Grant</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Academic Alert Modal */}
+      {isAlertModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-blue-50">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-100 text-blue-600 rounded-full">
+                  <Bell className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-blue-900">Add Academic Alert</h2>
+                  <p className="text-xs font-medium text-blue-700">Reminders for tests, exams, and events.</p>
+                </div>
+              </div>
+              <button onClick={() => setIsAlertModalOpen(false)} className="text-blue-400 hover:text-blue-700 bg-white rounded-full p-1 shadow-sm">
+                <XCircle className="w-6 h-6" />
+              </button>
+            </div>
+            <form onSubmit={handleAlertSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
+              
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Alert Title</label>
+                <input 
+                  type="text" 
+                  value={alertTitle}
+                  onChange={(e) => setAlertTitle(e.target.value)}
+                  placeholder="e.g. Data Structures Mid-term"
+                  required
+                  className="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 font-medium"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700">Alert Type</label>
+                  <div className="relative">
+                    <select 
+                      className="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 font-medium"
+                      value={alertType}
+                      onChange={(e) => setAlertType(e.target.value)}
+                      required
+                    >
+                      {ALERT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-bold text-gray-700">Date</label>
+                  <input 
+                    type="date" 
+                    value={alertDate}
+                    onChange={(e) => {
+                      setAlertDate(e.target.value);
+                      setAlertLectureId(""); // reset lecture since day changed
+                    }}
+                    required
+                    className="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-gray-700">Select Lecture</label>
+                <div className="relative">
+                  <select 
+                    className="w-full appearance-none bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 font-medium"
+                    value={alertLectureId}
+                    onChange={(e) => setAlertLectureId(e.target.value)}
+                    required
+                  >
+                    <option value="" disabled>Select a lecture</option>
+                    {lecturesOnAlertDate.map(l => (
+                      <option key={l.id} value={l.id}>{l.lectureName} ({l.startTime} - {l.endTime})</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />
+                </div>
+                {lecturesOnAlertDate.length === 0 && (
+                  <p className="text-xs text-red-500 mt-1">No lectures scheduled on this day. Change date to proceed.</p>
                 )}
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-bold text-gray-700">Optional Note</label>
                 <textarea 
-                  value={grantNote}
-                  onChange={(e) => setGrantNote(e.target.value)}
-                  placeholder="e.g., Medical certificate attached in college portal"
-                  className="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-purple-500 focus:border-purple-500 block p-3 font-medium text-sm resize-none"
-                  rows={2}
+                  value={alertNote} onChange={(e) => setAlertNote(e.target.value)}
+                  className="w-full bg-gray-50 border border-gray-300 text-gray-900 rounded-lg focus:ring-blue-500 focus:border-blue-500 block p-3 font-medium text-sm resize-none" rows={2}
                 />
               </div>
 
             </form>
-
             <div className="p-6 border-t border-gray-100 bg-gray-50 flex gap-4">
+              <button type="button" onClick={() => setIsAlertModalOpen(false)} className="flex-1 py-3 px-4 bg-white border border-gray-300 rounded-xl font-bold text-gray-700">Cancel</button>
               <button 
-                type="button" 
-                onClick={() => setIsGrantedModalOpen(false)}
-                className="flex-1 py-3 px-4 bg-white border border-gray-300 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                onClick={handleAlertSubmit} 
+                disabled={isSavingAlert || !alertLectureId} 
+                className="flex-1 py-3 px-4 bg-blue-600 rounded-xl font-bold text-white hover:bg-blue-700 disabled:opacity-50 flex justify-center items-center gap-2"
               >
-                Cancel
-              </button>
-              <button 
-                onClick={handleGrantSubmit}
-                disabled={isGranting || (!grantApplyToAll && grantSpecificLectures.length === 0)}
-                className="flex-1 py-3 px-4 bg-purple-600 rounded-xl font-bold text-white hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-md shadow-purple-200"
-              >
-                {isGranting ? "Applying..." : <><CheckSquare className="w-5 h-5"/> Apply Grant</>}
+                {isSavingAlert ? "Saving..." : <><CheckSquare className="w-5 h-5"/> Add Alert</>}
               </button>
             </div>
-            
           </div>
         </div>
       )}
