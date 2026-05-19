@@ -7,6 +7,7 @@ import { doc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from "fi
 import { sendPasswordResetEmail, deleteUser } from "firebase/auth";
 import { useRouter } from "next/navigation";
 import { GraduationCap, Calendar, AlertTriangle, Key, Trash2, BookOpen, Download, Edit2, Check, ShieldAlert } from "lucide-react";
+import { formatTime12Hour } from "@/utils/formatTime";
 
 const FIXED_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
@@ -267,42 +268,76 @@ export default function Profile() {
             </div>
 
             {timetable.length > 0 ? (
-              <div className="overflow-x-auto mb-6 border border-gray-200 rounded-xl">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Schedule</th>
-                    </tr>
-                  </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {groupedTimetable.map(({ day, lectures }) => (
-                      <tr key={day}>
-                        <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-gray-900 bg-gray-50 w-32 align-top">{day}</td>
-                        <td className="px-4 py-2">
-                          {lectures.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                              {lectures.map((l: any, idx: number) => (
-                                <div key={idx} className="bg-orange-50 border border-orange-200 rounded-lg p-2 text-xs w-48 shrink-0">
-                                  <div className="font-bold text-orange-900 truncate" title={l.lectureName}>{l.lectureName}</div>
-                                  <div className="text-orange-700 mt-1">{l.startTime} - {l.endTime}</div>
-                                  {(l.facultyName || l.roomNumber) && (
-                                    <div className="text-orange-600/80 mt-1 truncate">
-                                      {l.facultyName} {l.roomNumber && `| Room ${l.roomNumber}`}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          ) : (
-                            <span className="text-sm text-gray-400 italic py-2 block">No classes scheduled</span>
-                          )}
-                        </td>
+              <>
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto mb-6 border border-gray-200 rounded-xl">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Day</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Schedule</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {groupedTimetable.map(({ day, lectures }) => (
+                        <tr key={day}>
+                          <td className="px-4 py-4 whitespace-nowrap text-sm font-bold text-gray-900 bg-gray-50 w-32 align-top">{day}</td>
+                          <td className="px-4 py-2">
+                            {lectures.length > 0 ? (
+                              <div className="flex flex-wrap gap-2">
+                                {lectures.map((l: any, idx: number) => (
+                                  <div key={idx} className="bg-orange-50 border border-orange-200 rounded-lg p-2 text-xs w-48 shrink-0">
+                                    <div className="font-bold text-orange-900 truncate" title={l.lectureName}>{l.lectureName}</div>
+                                    <div className="text-orange-700 mt-1">{formatTime12Hour(l.startTime)} - {formatTime12Hour(l.endTime)}</div>
+                                    {(l.facultyName || l.roomNumber) && (
+                                      <div className="text-orange-600/80 mt-1 truncate">
+                                        {l.facultyName} {l.roomNumber && `| Room ${l.roomNumber}`}
+                                      </div>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-sm text-gray-400 italic py-2 block">No classes scheduled</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Card View */}
+                <div className="md:hidden flex flex-col gap-4 mb-6">
+                  {groupedTimetable.map(({ day, lectures }) => (
+                    <div key={day} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                      <div className="bg-gray-50 px-4 py-3 border-b border-gray-200 font-bold text-gray-800">
+                        {day}
+                      </div>
+                      <div className="p-4 flex flex-col gap-3">
+                        {lectures.length > 0 ? (
+                          lectures.map((l: any, idx: number) => (
+                            <div key={idx} className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                              <div className="font-bold text-orange-900 mb-1">{l.lectureName}</div>
+                              <div className="text-sm font-medium text-orange-700 flex items-center gap-2">
+                                {formatTime12Hour(l.startTime)} - {formatTime12Hour(l.endTime)}
+                              </div>
+                              {(l.facultyName || l.roomNumber) && (
+                                <div className="text-xs text-orange-600/80 mt-2 flex flex-wrap gap-x-3 gap-y-1">
+                                  {l.facultyName && <span>👨‍🏫 {l.facultyName}</span>}
+                                  {l.roomNumber && <span>📍 Room {l.roomNumber}</span>}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">No classes scheduled</span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
             ) : (
               <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-8 text-center mb-6">
                 <p className="text-gray-500">You haven't set up a timetable yet.</p>
@@ -310,10 +345,10 @@ export default function Profile() {
             )}
 
             <div className="flex flex-col sm:flex-row gap-4">
-              <button onClick={() => router.push("/upload")} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50">
+              <button onClick={() => { localStorage.removeItem("temp_extracted_timetable"); router.push("/upload"); }} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-white border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50">
                 <Download className="w-4 h-4" /> Upload New Timetable
               </button>
-              <button onClick={() => router.push("/confirm")} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500">
+              <button onClick={() => { localStorage.removeItem("temp_extracted_timetable"); router.push("/confirm"); }} className="flex-1 flex justify-center items-center gap-2 rounded-md bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-orange-500">
                 <Edit2 className="w-4 h-4" /> Edit Manually
               </button>
             </div>

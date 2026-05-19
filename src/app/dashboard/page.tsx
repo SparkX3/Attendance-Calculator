@@ -6,6 +6,7 @@ import { db, auth } from "@/firebase/config";
 import { collection, getDocs, doc, setDoc, serverTimestamp, query, where, orderBy } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { LogOut, Calendar, CheckCircle2, XCircle, Clock, User as UserIcon, MapPin, Target, AlertCircle, Settings, Award, Undo2, ChevronDown, CheckSquare, Bell, BellRing, ShieldAlert } from "lucide-react";
+import { formatTime12Hour } from "@/utils/formatTime";
 import { signOut } from "firebase/auth";
 import Link from "next/link";
 
@@ -57,7 +58,11 @@ export default function Dashboard() {
   const [fetching, setFetching] = useState(true);
 
   // Default to today's date
-  const todayStr = new Date().toLocaleDateString('en-CA');
+  const todayDate = new Date();
+  const todayStr = todayDate.toLocaleDateString('en-CA');
+  const tomorrowDate = new Date(todayDate);
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = tomorrowDate.toLocaleDateString('en-CA');
   const [selectedDateStr, setSelectedDateStr] = useState<string>(todayStr);
 
   // Granted Modal State
@@ -244,7 +249,7 @@ export default function Dashboard() {
         day: DAYS_MAP[alertDateObj.getDay()],
         lectureId: selectedLec.id,
         lectureName: selectedLec.lectureName,
-        time: `${selectedLec.startTime} - ${selectedLec.endTime}`,
+        time: `${formatTime12Hour(selectedLec.startTime)} - ${formatTime12Hour(selectedLec.endTime)}`,
         note: alertNote,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -369,7 +374,7 @@ export default function Dashboard() {
           </div>
 
           <div className="flex items-center justify-center flex-1 sm:flex-none mx-4 gap-2">
-            <div className="relative group">
+            <div className="relative group w-full sm:w-auto max-w-[150px] sm:max-w-none">
               <input 
                 type="date" 
                 value={selectedDateStr}
@@ -377,9 +382,9 @@ export default function Dashboard() {
                   setSelectedDateStr(e.target.value);
                   setSelectedLecture(null);
                 }}
-                className="pl-10 pr-4 py-2 border-2 border-indigo-100 rounded-lg text-indigo-900 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-50 cursor-pointer transition-colors"
+                className="w-full pl-8 sm:pl-10 pr-2 sm:pr-4 py-2 border-2 border-indigo-100 rounded-lg text-indigo-900 font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-indigo-50/50 hover:bg-indigo-50 cursor-pointer transition-colors text-xs sm:text-base"
               />
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-indigo-500 pointer-events-none" />
+              <Calendar className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-indigo-500 pointer-events-none" />
             </div>
             
             <div className="flex gap-2">
@@ -474,18 +479,49 @@ export default function Dashboard() {
                   </div>
                 ))}
                 
-                {upcomingAlerts.map(alert => (
-                  <div key={alert.id} className="p-3 rounded-xl bg-blue-50 border border-blue-100 flex flex-col gap-1">
-                    <div className="flex justify-between items-start">
-                      <div className="font-semibold text-blue-900 text-sm">{alert.title}</div>
-                      <span className="text-[10px] uppercase font-bold bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full shrink-0">{alert.type}</span>
+                {upcomingAlerts.map(alert => {
+                  const isExam = /exam|test|internal/i.test(alert.title) || /exam|test|internal/i.test(alert.type);
+                  const isTomorrow = alert.selectedDate === tomorrowStr;
+                  const isToday = alert.selectedDate === todayStr;
+                  
+                  let DateBadge;
+                  if (isToday) {
+                    DateBadge = <span className="font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[10px] uppercase">TODAY</span>;
+                  } else if (isTomorrow) {
+                    if (isExam) {
+                      DateBadge = <span className="font-extrabold text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded text-[10px] uppercase shadow-sm">TOMORROW!</span>;
+                    } else {
+                      DateBadge = <span className="font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded text-[10px] uppercase shadow-sm">TOMORROW!</span>;
+                    }
+                  } else {
+                    const d = new Date(alert.selectedDate);
+                    DateBadge = <span>{d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}</span>;
+                  }
+
+                  const cardClasses = isExam 
+                    ? "p-4 rounded-xl bg-red-50 border border-red-200 flex flex-col gap-2 shadow-sm"
+                    : "p-4 rounded-xl bg-blue-50 border border-blue-100 flex flex-col gap-2 shadow-sm hover:shadow transition-shadow";
+
+                  const titleClasses = isExam ? "font-bold text-red-900 text-sm" : "font-semibold text-blue-900 text-sm";
+                  const typeClasses = isExam 
+                    ? "text-[10px] uppercase font-bold bg-red-200 text-red-800 px-2 py-0.5 rounded-full shrink-0"
+                    : "text-[10px] uppercase font-bold bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full shrink-0";
+                  const textClasses = isExam ? "text-xs text-red-700 font-medium flex items-center gap-2" : "text-xs text-blue-700 font-medium flex items-center gap-2";
+                  const noteClasses = isExam ? "text-xs text-red-600 mt-1 italic" : "text-xs text-blue-600 mt-1 italic";
+
+                  return (
+                    <div key={alert.id} className={cardClasses}>
+                      <div className="flex justify-between items-start">
+                        <div className={titleClasses}>{alert.title}</div>
+                        <span className={typeClasses}>{alert.type}</span>
+                      </div>
+                      <div className={textClasses}>
+                        {DateBadge} <span className="opacity-50">|</span> <span>{alert.lectureName}</span> <span className="opacity-50">|</span> <span>{alert.time}</span>
+                      </div>
+                      {alert.note && <div className={noteClasses}>{alert.note}</div>}
                     </div>
-                    <div className="text-xs text-blue-700 font-medium">
-                      {alert.selectedDate} | {alert.lectureName} | {alert.time}
-                    </div>
-                    {alert.note && <div className="text-xs text-blue-600 mt-1 italic">{alert.note}</div>}
-                  </div>
-                ))}
+                  );
+                })}
 
                 {lowSubjects.length === 0 && upcomingAlerts.length === 0 && (
                   <div className="flex flex-col items-center justify-center h-full text-gray-400 mt-8">
@@ -521,7 +557,7 @@ export default function Dashboard() {
                 {dayLectures.map(lecture => {
                   const status = getStatusForSelectedDate(lecture.id);
                   const isSelected = selectedLecture?.id === lecture.id;
-                  const timeRange = `${lecture.startTime || ""} - ${lecture.endTime || ""}`;
+                  const timeRange = `${formatTime12Hour(lecture.startTime)} - ${formatTime12Hour(lecture.endTime)}`;
                   
                   return (
                     <div 
@@ -581,7 +617,7 @@ export default function Dashboard() {
               <h2 className="text-xl font-bold text-gray-900 mb-1 pr-4">{selectedLecture.lectureName}</h2>
               <div className="flex items-center text-sm text-gray-500 font-medium gap-3">
                 <span className="flex items-center gap-1"><Calendar className="w-4 h-4"/> {selectedDayName}</span>
-                <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> {selectedLecture.startTime} - {selectedLecture.endTime}</span>
+                <span className="flex items-center gap-1"><Clock className="w-4 h-4"/> {formatTime12Hour(selectedLecture.startTime)} - {formatTime12Hour(selectedLecture.endTime)}</span>
               </div>
             </div>
             <button onClick={() => setSelectedLecture(null)} className="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm md:hidden">
@@ -872,7 +908,7 @@ export default function Dashboard() {
                   >
                     <option value="" disabled>Select a lecture</option>
                     {lecturesOnAlertDate.map(l => (
-                      <option key={l.id} value={l.id}>{l.lectureName} ({l.startTime} - {l.endTime})</option>
+                      <option key={l.id} value={l.id}>{l.lectureName} ({formatTime12Hour(l.startTime)} - {formatTime12Hour(l.endTime)})</option>
                     ))}
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 pointer-events-none" />

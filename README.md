@@ -1,41 +1,85 @@
-<<<<<<< HEAD
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Smart Attendance Tracker
 
-## Getting Started
+A modern, responsive, Firebase-backed web application built with **Next.js**, designed to manage college attendance, track upcoming academic alerts, and extract actionable insights through an elegant dashboard.
 
-First, run the development server:
+This project is fully optimized for **Vercel Deployment** and structurally prepared for **PWA (Progressive Web App)** or native Android wrapper deployment (via Capacitor or TWA).
+
+## Features
+- **Firebase Authentication:** Secure Google OAuth and Email/Password login.
+- **Dynamic Dashboard:** Real-time percentage tracking, target metrics, and interactive attendance marking.
+- **Notice Board / Alerts:** Centralized academic alerts (exams, internals, granted leaves) natively categorized with intuitive UI tagging.
+- **Timetable Library Engine:** Manage presets via an Admin panel, allowing students to adopt pre-filled schedules seamlessly.
+- **Mobile-First Responsiveness:** Stacked card interfaces on mobile displays instead of overflow tables.
+- **Premium Splash Animation:** Lightweight `framer-motion` initialization sequence.
+
+## Tech Stack
+- **Framework:** Next.js (App Router)
+- **Styling:** Tailwind CSS (Dark Mode Native)
+- **Database / Auth:** Firebase (Firestore + Authentication)
+- **Animations:** Framer Motion
+- **Icons:** Lucide React
+
+---
+
+## Environment Setup
+
+To run this project locally or deploy it, you must configure the Firebase environment variables. 
+Copy the provided `.env.example` to `.env.local` and populate it with your Firebase console credentials:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cp .env.example .env.local
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Required variables:
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Local Development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Install dependencies and start the development server:
+```bash
+npm install
+npm run dev
+```
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Vercel Deployment Steps
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Push your code to a GitHub repository.
+2. Log into [Vercel](https://vercel.com/) and click **Add New Project**.
+3. Import your GitHub repository.
+4. Expand the **Environment Variables** section.
+5. Add all the `NEXT_PUBLIC_FIREBASE_*` variables from your `.env.local` file.
+6. Click **Deploy**.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+> **IMPORTANT:** 
+> Once deployed, you **must** add your Vercel production domain to your Firebase Authorized Domains:
+> 1. Go to Firebase Console -> Authentication -> Settings -> Authorized Domains.
+> 2. Click "Add Domain" and paste your Vercel domain (e.g., `your-app.vercel.app`).
+> 3. If you do not do this, Google Login will fail in production.
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Android App & PWA Readiness
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-=======
-# Attendance-Calculator
-Attendance Calculator
->>>>>>> 7fd2a0e07092c0a4418e270464ab9c81dc190076
+This project follows a strict mobile-first paradigm and incorporates PWA baseline features.
+- `public/manifest.json` is configured.
+- `theme-color` and `viewport-fit=cover` meta tags are present for notch-safe layouts.
+- Environment variables CSS overrides (`env(safe-area-inset-top)`) are globally applied.
+
+**Future Conversion (Capacitor / TWA):**
+If you wish to compile this to a native Android `.apk` / `.aab`, this Next.js export is fully compatible with [Capacitor](https://capacitorjs.com/) or Trusted Web Activities (TWA) wrappers.
+
+---
+
+## Admin Configuration
+
+To access the `/admin` route (which controls the preset timetable library), the logged-in user's email must match the authorized admin email configured in the codebase logic (`src/app/admin/page.tsx`). By default, it checks for a specific email. Update the hardcoded admin email in the component to match your intended admin's Google Auth email address.

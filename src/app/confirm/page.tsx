@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { formatTime12Hour } from "@/utils/formatTime";
 import { useAuth } from "@/context/AuthContext";
 import { db } from "@/firebase/config";
 import { doc, setDoc, serverTimestamp, collection, getDocs, deleteDoc } from "firebase/firestore";
@@ -180,7 +181,7 @@ export default function ConfirmTimetable() {
               </div>
               
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
+                <table className="min-w-full divide-y divide-gray-200 hidden sm:table">
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-1/8">Start Time</th>
@@ -201,10 +202,10 @@ export default function ConfirmTimetable() {
                                 type="time" 
                                 value={lecture.startTime} 
                                 onChange={(e) => updateLecture(lecture.id, "startTime", e.target.value)}
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
+                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1 text-gray-900"
                               />
                             ) : (
-                              <span className="text-sm font-medium text-gray-900">{lecture.startTime || "-"}</span>
+                              <span className="text-sm font-medium text-gray-900">{formatTime12Hour(lecture.startTime)}</span>
                             )}
                           </td>
                           <td className="px-4 py-4 whitespace-nowrap">
@@ -213,10 +214,10 @@ export default function ConfirmTimetable() {
                                 type="time" 
                                 value={lecture.endTime} 
                                 onChange={(e) => updateLecture(lecture.id, "endTime", e.target.value)}
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
+                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1 text-gray-900"
                               />
                             ) : (
-                              <span className="text-sm font-medium text-gray-900">{lecture.endTime || "-"}</span>
+                              <span className="text-sm font-medium text-gray-900">{formatTime12Hour(lecture.endTime)}</span>
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -226,7 +227,7 @@ export default function ConfirmTimetable() {
                                 list="lecture-names"
                                 value={lecture.lectureName} 
                                 onChange={(e) => updateLecture(lecture.id, "lectureName", e.target.value)}
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
+                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1 text-gray-900 placeholder-gray-500"
                                 placeholder="Data Structures"
                               />
                             ) : (
@@ -239,7 +240,7 @@ export default function ConfirmTimetable() {
                                 type="text" 
                                 value={lecture.facultyName} 
                                 onChange={(e) => updateLecture(lecture.id, "facultyName", e.target.value)}
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
+                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1 text-gray-900 placeholder-gray-500"
                               />
                             ) : (
                               <span className="text-sm text-gray-500">{lecture.facultyName || "-"}</span>
@@ -251,7 +252,7 @@ export default function ConfirmTimetable() {
                                 type="text" 
                                 value={lecture.roomNumber} 
                                 onChange={(e) => updateLecture(lecture.id, "roomNumber", e.target.value)}
-                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1"
+                                className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm px-2 py-1 text-gray-900 placeholder-gray-500"
                               />
                             ) : (
                               <span className="text-sm text-gray-500">{lecture.roomNumber || "-"}</span>
@@ -275,6 +276,67 @@ export default function ConfirmTimetable() {
                     )}
                   </tbody>
                 </table>
+                
+                {/* Mobile Card View */}
+                <div className="sm:hidden flex flex-col gap-4 p-4">
+                  {lectures.length > 0 ? (
+                    lectures.map((lecture) => (
+                      <div key={lecture.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm flex flex-col gap-3 relative">
+                        {(isEditMode || lectures.length === 0) && (
+                          <button onClick={() => deleteLecture(lecture.id)} className="absolute top-4 right-4 text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded-md transition-colors"><Trash2 className="w-4 h-4"/></button>
+                        )}
+                        <div className="grid grid-cols-2 gap-3 pr-8">
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Start Time</label>
+                            {isEditMode ? (
+                              <input type="time" value={lecture.startTime} onChange={(e) => updateLecture(lecture.id, "startTime", e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm px-2 py-1.5 text-gray-900" />
+                            ) : (
+                              <div className="text-sm font-medium text-gray-900 mt-1">{formatTime12Hour(lecture.startTime)}</div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">End Time</label>
+                            {isEditMode ? (
+                              <input type="time" value={lecture.endTime} onChange={(e) => updateLecture(lecture.id, "endTime", e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm px-2 py-1.5 text-gray-900" />
+                            ) : (
+                              <div className="text-sm font-medium text-gray-900 mt-1">{formatTime12Hour(lecture.endTime)}</div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-gray-500 uppercase">Lecture Name</label>
+                          {isEditMode ? (
+                            <input type="text" list="lecture-names" value={lecture.lectureName} onChange={(e) => updateLecture(lecture.id, "lectureName", e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm px-2 py-1.5 text-gray-900 placeholder-gray-500" placeholder="Data Structures" />
+                          ) : (
+                            <div className="text-sm font-medium text-gray-900 mt-1">{lecture.lectureName || "-"}</div>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Faculty (Opt)</label>
+                            {isEditMode ? (
+                              <input type="text" value={lecture.facultyName} onChange={(e) => updateLecture(lecture.id, "facultyName", e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm px-2 py-1.5 text-gray-900 placeholder-gray-500" />
+                            ) : (
+                              <div className="text-sm text-gray-500 mt-1">{lecture.facultyName || "-"}</div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-[10px] font-bold text-gray-500 uppercase">Room (Opt)</label>
+                            {isEditMode ? (
+                              <input type="text" value={lecture.roomNumber} onChange={(e) => updateLecture(lecture.id, "roomNumber", e.target.value)} className="w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 text-sm px-2 py-1.5 text-gray-900 placeholder-gray-500" />
+                            ) : (
+                              <div className="text-sm text-gray-500 mt-1">{lecture.roomNumber || "-"}</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center text-sm text-gray-500 italic py-4">
+                      No classes scheduled for this day.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           ))}
