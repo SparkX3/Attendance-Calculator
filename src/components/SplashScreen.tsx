@@ -50,6 +50,7 @@ export default function SplashScreen({ children }: { children: React.ReactNode }
                   src="/logo.png" 
                   alt="TrackMy75 Logo" 
                   fill
+                  sizes="(max-width: 640px) 96px, 128px"
                   className="object-contain drop-shadow-2xl"
                   priority
                 />
