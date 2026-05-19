@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useState } from "react";
-import { CheckSquare } from "lucide-react";
+import Image from "next/image";
 
 export default function SplashScreen({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(true);
@@ -38,32 +38,39 @@ export default function SplashScreen({ children }: { children: React.ReactNode }
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.5, ease: "easeOut" }}
             >
-              {/* Logo container with soft glow */}
+              {/* Logo container */}
               <motion.div 
-                className="relative p-4 bg-indigo-600 rounded-2xl shadow-[0_0_40px_rgba(79,70,229,0.3)] dark:shadow-[0_0_40px_rgba(79,70,229,0.5)]"
-                initial={{ y: 10 }}
-                animate={{ y: 0 }}
+                className="relative w-24 h-24 sm:w-32 sm:h-32 mb-2"
+                initial={{ y: 10, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
                 transition={{ duration: 0.5, ease: "easeOut", delay: 0.1 }}
               >
-                <CheckSquare className="w-12 h-12 sm:w-16 sm:h-16 text-white" />
+                {/* Assuming user places logo.png in public folder */}
+                <Image 
+                  src="/logo.png" 
+                  alt="TrackMy75 Logo" 
+                  fill
+                  className="object-contain drop-shadow-2xl"
+                  priority
+                />
               </motion.div>
               
               <motion.h1 
-                className="text-2xl sm:text-3xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600 dark:from-indigo-400 dark:to-purple-400 tracking-tight"
+                className="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-teal-600 to-yellow-500 dark:from-teal-400 dark:to-yellow-400 tracking-tight"
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, ease: "easeOut", delay: 0.2 }}
               >
-                Track Smarter
+                TrackMy75
               </motion.h1>
               
               <motion.p 
-                className="text-sm sm:text-base font-medium text-gray-500 dark:text-gray-400"
+                className="text-xs sm:text-sm font-bold tracking-widest text-gray-500 dark:text-gray-400 uppercase"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.5, ease: "easeOut", delay: 0.4 }}
               >
-                Attendance Tracker
+                Student Attendance Tracker
               </motion.p>
             </motion.div>
           </motion.div>
